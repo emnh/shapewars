@@ -100,6 +100,16 @@ function addUnit(spec, initial) {
   unit.getHealth = function() {
     return unit.health;
   };
+  unit.dead = false;
+  unit.remove = function() {
+    unit.dead = true;
+    unit.healthBar.$progress.remove();
+    data.scene.remove(unit.three);
+    // TODO: optimize
+    data.units = data.units.filter(function(o) {
+      return o != unit;
+    });
+  };
   unit.tick = function() {
     var move = function() {
       var speed = unit.team == 0 ? spec.speed : -spec.speed;
@@ -128,10 +138,19 @@ function addUnit(spec, initial) {
       return targets;
     };
     var attack = function(targets) {
-      for (var i = 0; i < targets.length; i++) {
-        var target = targets[i];
-        target.setHealth(Math.max(target.getHealth() - spec.damage, 0));
-        break;
+      var attackTime = getGameTime();
+      if (unit.lastAttack === undefined ||
+          attackTime - unit.lastAttack >= unit.spec.fireRate * 1000.0) {
+        for (var i = 0; i < targets.length; i++) {
+          var target = targets[i];
+          target.setHealth(Math.max(target.getHealth() - spec.damage, 0));
+          unit.lastAttack = attackTime;
+          // remove dead units
+          if (target.getHealth() <= 0) {
+            target.remove();
+          }
+          break;
+        }
       }
     };
     var targets = targetsInRange();
@@ -145,32 +164,36 @@ function addUnit(spec, initial) {
   return unit;
 }
 
-function send() {
-  var spec = {
-    size: 5,
-    speed: 1.0,
-    sight: 10,
-    range: 50,
-    damage: 0.01,
-    health: 100,
-    maxHealth: 100,
-  };
-  var initial = {
-    team: 0,
-  };
-  var unit = addUnit(spec, initial);
-  var offset = 10;
-  unit.three.position.x = 
-    unit.team == 0 ?
-    data.base1.three.position.x + data.base1.spec.size + offset : 
-    data.base2.three.position.x - data.base2.spec.size - offset;
-  unit.three.position.y = (Math.random() * 2.0 - 1.0) * data.yBound;
-  data.units.push(unit);
+function getSend(team) {
+  return function send() {
+    var spec = {
+      size: 5,
+      speed: 1.0,
+      sight: 10,
+      range: 50,
+      damage: 1.0,
+      fireRate: 1.0,
+      maxHealth: 5,
+    };
+    var initial = {
+      team: team,
+    };
+    var unit = addUnit(spec, initial);
+    var offset = 10;
+    unit.three.position.x = 
+      unit.team == 0 ?
+      data.base1.three.position.x + data.base1.spec.size + offset : 
+      data.base2.three.position.x - data.base2.spec.size - offset;
+    unit.three.position.y = (Math.random() * 2.0 - 1.0) * data.yBound;
+    data.units.push(unit);
+  }
 }
 
 function setupHandlers() {
-  var $send = $('#send');
-  $send.click(send);
+  var $send1 = $('#send1');
+  $send1.click(getSend(0));
+  var $send2 = $('#send2');
+  $send2.click(getSend(1));
 }
 
 function addLights() {
@@ -221,8 +244,9 @@ function addBases() {
     size: data.BaseSize,
     speed: 0,
     sight: 10,
-    range: 5,
-    damage: 1.0,
+    range: 100,
+    damage: 5.0,
+    fireRate: 1.0,
     maxHealth: 100,
     type: data.UnitType.BASE,
   };
@@ -291,6 +315,35 @@ function addProgressBar(unit) {
   return progress;
 }
 
+function checkWin() {
+  var message;
+  var finished = false;
+  message = "TIE";
+  finished = true;
+  if (data.base1.dead && data.base2.dead) {
+    message = "TIE";
+    finished = true;
+  }
+  if (data.base1.dead) {
+    message = "RIGHT TEAM WINS!";
+    finished = true;
+  }
+  if (data.base2.dead) {
+    message = "LEFT TEAM WINS!";
+    finished = true;
+  }
+  if (finished) {
+    h1 = $("<h1 class='final'/>");
+    h1.html(message);
+    $("body").append(h1);
+    h1.offset({
+      top: window.innerHeight / 2 - h1.height() / 2,
+      left: window.innerWidth / 2 - h1.width() / 2,
+    });
+  }
+  return finished;
+}
+
 function tick() {
   elapsed = getGameTime() - data.startTime;
 
@@ -299,12 +352,9 @@ function tick() {
     unit.tick();
   }
 
-  //data.sphere.position.x = Math.sin(elapsed * 0.01) * 50.0;
-  //data.sphere.position.y = Math.cos(elapsed * 0.01) * 50.0;
-
-  // data.base1.health.setHealth((Math.sin(elapsed * 0.001) + 1.0) / 2.0);
-
-  setTimeout(tick, 1);
+  if (!checkWin()) {
+    setTimeout(tick, 1);
+  }
 }
 
 function update() {
