@@ -1,6 +1,10 @@
+function getGameTime() {
+  return (new Date()).getTime();
+}
+
 function main() {
   // set the scene size
-  var WIDTH = 800,
+  var WIDTH = window.innerWidth,
     HEIGHT = 600;
 
   // set some camera attributes
@@ -43,9 +47,24 @@ function main() {
 
   addLights();
 
+  addBases();
   addUnits();
 
+  setupHandlers();
+
   requestAnimationFrame(update);
+
+  data.startTime = getGameTime();
+  tick();
+}
+
+function send() {
+  console.log("send");
+}
+
+function setupHandlers() {
+  var $send = $('#send');
+  $send.click(send);
 }
 
 function addLights() {
@@ -62,9 +81,52 @@ function addLights() {
   data.scene.add(pointLight);
 }
 
+function getSphere(radius, color) {
+  // set up the sphere vars
+  var radius = radius,
+      segments = 16,
+      rings = 16;
+
+  // create the sphere's material
+  var sphereMaterial =
+    new THREE.MeshLambertMaterial(
+      {
+        color: color
+      });
+
+  // create a new mesh with
+  // sphere geometry - we will cover
+  // the sphereMaterial next!
+  var sphere = new THREE.Mesh(
+
+    new THREE.SphereGeometry(
+      radius,
+      segments,
+      rings),
+
+    sphereMaterial);
+
+  return sphere; 
+}
+
+function addBases() {
+  var baseSize = 50;
+  var baseOffset = 300;
+  var base1 = getSphere(baseSize, 0xFF0000);
+  base1.position.x = -baseOffset;
+  data.base1 = {};
+  data.base1.three = base1;
+  data.scene.add(base1);
+  var base2 = getSphere(baseSize, 0x0000FF);
+  base2.position.x = baseOffset;
+  data.base2 = {};
+  data.base2.three = base2;
+  data.scene.add(base2);
+}
+
 function addUnits() {
   // set up the sphere vars
-  var radius = 50,
+  var radius = 5,
       segments = 16,
       rings = 16;
 
@@ -87,12 +149,22 @@ function addUnits() {
 
     sphereMaterial);
 
+  data.sphere = sphere;
+
   // add the sphere to the scene
   data.scene.add(sphere);
 }
 
+function tick() {
+  elapsed = getGameTime() - data.startTime;
+  data.sphere.position.x = Math.sin(elapsed * 0.01) * 50.0;
+  data.sphere.position.y = Math.cos(elapsed * 0.01) * 50.0;
+  setTimeout(tick, 1);
+}
+
 function update() {
   data.renderer.render(data.scene, data.camera);
+  requestAnimationFrame(update);
 }
 
 var data = {};
