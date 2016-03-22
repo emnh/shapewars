@@ -2,6 +2,10 @@ function getGameTime() {
   return (new Date()).getTime();
 }
 
+function formatFloat(x, decimals) {
+  return x.toFixed(decimals);
+}
+
 function main() {
   // set the scene size
   var WIDTH = window.innerWidth,
@@ -112,16 +116,55 @@ function getSphere(radius, color) {
 function addBases() {
   var baseSize = 50;
   var baseOffset = 300;
+
   var base1 = getSphere(baseSize, 0xFF0000);
   base1.position.x = -baseOffset;
   data.base1 = {};
   data.base1.three = base1;
   data.scene.add(base1);
+ 
+  var health = addBaseHealth();
+  var healthWidth = 300;
+  health.$progress.offset({
+    top: 100,
+    left: 80
+  });
+  health.$progress.width(healthWidth);
+  data.base1.health = health;
+
   var base2 = getSphere(baseSize, 0x0000FF);
   base2.position.x = baseOffset;
   data.base2 = {};
   data.base2.three = base2;
   data.scene.add(base2);
+
+  var health = addBaseHealth();
+  health.$progress.offset({
+    top: 100,
+    left: window.innerWidth - 80 - healthWidth
+  });
+  health.$progress.width(healthWidth);
+  data.base2.health = health;
+}
+
+function addBaseHealth() {
+  progress = {};
+
+  $progress = $("<div class='myProgress'/>");
+  $bar = $("<div class='myBar'/>");
+  $text = $("<span/>");
+  $progress.append($bar);
+  $bar.append($text);
+  $("body").append($progress);
+
+  progress.setHealth = function(health) {
+    $bar.width(health * 100 + '%');
+    $text.html(formatFloat(health * 100, 0) + '%');
+  }
+  progress.$progress = $progress;
+  progress.setHealth(1.0);
+
+  return progress;
 }
 
 function addUnits() {
@@ -159,6 +202,9 @@ function tick() {
   elapsed = getGameTime() - data.startTime;
   data.sphere.position.x = Math.sin(elapsed * 0.01) * 50.0;
   data.sphere.position.y = Math.cos(elapsed * 0.01) * 50.0;
+
+  // data.base1.health.setHealth((Math.sin(elapsed * 0.001) + 1.0) / 2.0);
+
   setTimeout(tick, 1);
 }
 
