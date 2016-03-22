@@ -318,10 +318,8 @@ function addProgressBar(unit) {
 function checkWin() {
   var message;
   var finished = false;
-  message = "TIE";
-  finished = true;
   if (data.base1.dead && data.base2.dead) {
-    message = "TIE";
+    message = "GAME TIED!";
     finished = true;
   }
   if (data.base1.dead) {
