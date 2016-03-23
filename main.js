@@ -155,11 +155,22 @@ function addUnit(spec, initial) {
     };
     var targets = targetsInRange();
     if (targets.length > 0) {
-      attack(targets);
+      return {
+        category: "attack",
+        action: function() {
+          attack(targets);
+          unit.healthBar.tick();
+        }
+      };
     } else {
-      move();
+      return {
+        category: "move",
+        action: function() {
+          move();
+          unit.healthBar.tick();
+        }
+      };
     }
-    unit.healthBar.tick();
   };
   return unit;
 }
@@ -345,9 +356,22 @@ function checkWin() {
 function tick() {
   elapsed = getGameTime() - data.startTime;
 
+  var moves = [];
+  var attacks = [];
   for (var i = 0; i < data.units.length; i++) {
     var unit = data.units[i];
-    unit.tick();
+    var delayed = unit.tick();
+    if (delayed.category === "attack") {
+      attacks.push(delayed.action);
+    } else if (delayed.category === "move") {
+      moves.push(delayed.action);
+    }
+  }
+  for (var i = 0; i < attacks.length; i++) {
+    attacks[i]();
+  }
+  for (var i = 0; i < moves.length; i++) {
+    moves[i]();
   }
 
   if (!checkWin()) {
