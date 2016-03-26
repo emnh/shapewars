@@ -219,6 +219,9 @@ function addLights() {
 
   // add to the scene
   data.scene.add(pointLight);
+
+  var light = new THREE.AmbientLight(0x404040); // soft white light
+  data.scene.add(light);
 }
 
 function getSphere(radius, color) {
@@ -375,7 +378,8 @@ function tick() {
   }
 
   if (!checkWin()) {
-    setTimeout(tick, 1);
+    // setTimeout(tick, 1);
+    requestAnimationFrame(tick);
   }
 }
 
