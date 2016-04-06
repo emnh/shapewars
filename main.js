@@ -1,3 +1,12 @@
+
+var _maxId = 0;
+function getUniqueId(obj) {
+  if (!obj.hasOwnProperty('_id')) {
+    obj._id = _maxId++;
+  }
+  return obj._id;
+}
+
 function getGameTime() {
   return (new Date()).getTime();
 }
@@ -148,10 +157,6 @@ function addUnit(spec, initial, shadow) {
     unit.dead = true;
     unit.healthBar.$progress.remove();
     data.scene.remove(unit.three);
-    // TODO: optimize
-    data.units = data.units.filter(function(o) {
-      return o != unit;
-    });
   };
   unit.tick = function() {
     var move = function() {
@@ -220,15 +225,7 @@ function addUnit(spec, initial, shadow) {
 
 function getSend(team) {
   return function send() {
-    var spec = {
-      size: 5,
-      speed: 1.0,
-      sight: 10,
-      range: 50,
-      damage: 1.0,
-      fireRate: 1.0,
-      maxHealth: 5,
-    };
+    var spec = defaultSpec;
     var initial = {
       team: team,
     };
@@ -255,6 +252,10 @@ function connect() {
     });
 
     data.peer.clientConnPromise.then(function(conn) {
+      if (checkTestEnvironment()) {
+        ipcRenderer.sendToHost("connected", null);
+      }
+
       conn.on('data', function(received) {
         data.peer.received = received;
         // console.log('Received', received);
@@ -440,21 +441,50 @@ function serverTick() {
   for (var i = 0; i < moves.length; i++) {
     moves[i]();
   }
+  data.units = data.units.filter(function(unit) {
+    return !unit.dead;
+  });
 }
 
 function serializeUnits() {
   //var serializedSpecs = [];
-  // TODO: compress specs
-  var serializedUnits = [];
-  for (var i = 0; i < data.units.length; i++) {
+  var len = data.units.length;
+  var serializedUnits = {
+    units: [],
+    healths: new Float32Array(len),
+    teams: new Uint8Array(len),
+    positions: new Float32Array(3 * len),
+  };
+  for (var i = 0; i < len; i++) {
     var unit = data.units[i];
     var serializedUnit = {
       spec: unit.spec,
-      team: unit.team,
-      health: unit.health,
-      position: [unit.three.position.x, unit.three.position.y, unit.three.position.z]
     };
-    serializedUnits.push(serializedUnit);
+    serializedUnits.units.push(serializedUnit);
+    serializedUnits.healths[i] = unit.health;
+    serializedUnits.teams[i] = unit.team;
+    serializedUnits.positions[3 * i + 0] = unit.three.position.x;
+    serializedUnits.positions[3 * i + 1] = unit.three.position.y;
+    serializedUnits.positions[3 * i + 2] = unit.three.position.z;
+  }
+  return serializedUnits;
+}
+
+function serializeUnits2() {
+  //var serializedSpecs = [];
+  var len = data.units.length;
+  var serializedUnits = {
+    units: [],
+  };
+  for (var i = 0; i < len; i++) {
+    var unit = data.units[i];
+    var serializedUnit = {
+      spec: unit.spec,
+      health: unit.health,
+      team: unit.team,
+      position: [unit.three.position.x, unit.three.position.y, unit.three.position.z],
+    };
+    serializedUnits.units.push(serializedUnit);
   }
   return serializedUnits;
 }
@@ -462,7 +492,12 @@ function serializeUnits() {
 function sendData() {
   if (data.peer.serverConnPromise.isFulfilled()) {
     var conn = data.peer.serverConnPromise.value();
-    var serializedUnits = serializeUnits(data.units);
+    var serializedUnits = JSON.decycle(serializeUnits(data.units));
+    var serializedUnits2 = JSON.decycle(serializeUnits2(data.units));
+    var bp = BinaryPack.pack(serializedUnits);
+    var bp2 = BinaryPack.pack(serializedUnits2);
+    console.log("size: " + bp.size + " vs " + bp2.size);
+    console.log("size per unit: " + bp.size / data.units.length + " vs " + bp2.size / data.units.length);
     conn.send(serializedUnits);
   }
 }
@@ -471,21 +506,22 @@ function clientTick() {
   if (data.peer.received !== undefined) {
     console.log("updating received");
     var received = data.peer.received;
+    received = JSON.retrocycle(received);
     data.peer.received = undefined;
     for (var i = 0; i < data.units.length; i++) {
       var unit = data.units[i];
       unit.remove();
     }
-    for (var i = 0; i < received.length; i++) {
-      var receivedUnit = received[i];
+    for (var i = 0; i < received.units.length; i++) {
+      var receivedUnit = received.units[i];
       var initial = {
-        health: receivedUnit.health,
-        team: receivedUnit.team,
+        health: received.healths[i],
+        team: received.teams[i],
       }
       var unit = addUnit(receivedUnit.spec, initial, true);
-      unit.three.position.x = receivedUnit.position[0];
-      unit.three.position.y = receivedUnit.position[1];
-      unit.three.position.z = receivedUnit.position[2];
+      unit.three.position.x = received.positions[3 * i + 0];
+      unit.three.position.y = received.positions[3 * i + 1];
+      unit.three.position.z = received.positions[3 * i + 2];
       //console.log("xyz", unit.three.position.x, unit.three.position.y, unit.three.position.z);
       data.units.push(unit);
     }
@@ -513,9 +549,21 @@ function update() {
 if (checkTestEnvironment()) {
   console.log("test environment");
   var ipcRenderer = require('electron').ipcRenderer;
-  if (!checkTestServer()) {
+  if (checkTestServer()) {
+    ipcRenderer.on("launch-test", function(e, id) {
+      console.log("launching test");
+      var N = 10;
+      for (var i = 0; i < N; i++) {
+        getSend(0)();
+      }
+      for (var i = 0; i < N; i++) {
+        getSend(1)();
+      }
+    });
+
+  } else {
     ipcRenderer.on("peerId", function(e, id) {
-      console.log("rendererer on peerId: " + id);
+      console.log("renderer on peerId: " + id);
       $("#connectId").val(id);
       connect();
     });
@@ -523,6 +571,17 @@ if (checkTestEnvironment()) {
 } else {
   console.log("production environment");
 }
+
+var defaultSpec =
+  {
+    size: 5,
+    speed: 1.0,
+    sight: 10,
+    range: 50,
+    damage: 1.0,
+    fireRate: 1.0,
+    maxHealth: 5,
+  };
 
 var data = {};
 $(main);
