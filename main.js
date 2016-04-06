@@ -15,9 +15,18 @@ function worldToScreen(pos) {
   return new THREE.Vector2(vector.x, vector.y);
 }
 
+function checkTestEnvironment() {
+  //return window && window.process && window.process.type;
+  return window.shapewars_test !== undefined;
+}
+
+function checkTestServer() {
+  return window.shapewars_test.server === true;
+}
+
 function main() {
   data.BaseSize = 50;
-  data.BaseOffset = 300;
+  data.BaseOffset = 250;
   data.xBound = data.BaseOffset;
   data.yBound = 100;
   data.UnitType = {
@@ -28,7 +37,7 @@ function main() {
 
   // set the scene size
   var WIDTH = window.innerWidth,
-    HEIGHT = 600;
+    HEIGHT = 400;
   data.width = WIDTH;
   data.height = HEIGHT;
 
@@ -98,7 +107,14 @@ function setupPeer() {
   });
 
   data.peer.idPromise.then(function(id) {
-    $("#connectId").val(id);
+    if (checkTestEnvironment()) {
+      if (checkTestServer()) {
+        $("#connectId").val(id);
+        ipcRenderer.sendToHost("peerId", id);
+      }
+    } else {
+      $("#connectId").val(id);
+    }
   });
   data.peer.serverConnPromise = new Promise(function(resolve, reject) {
     data.peer.idPromise.then(function(id) {
@@ -492,6 +508,20 @@ function tick() {
 function update() {
   data.renderer.render(data.scene, data.camera);
   requestAnimationFrame(update);
+}
+
+if (checkTestEnvironment()) {
+  console.log("test environment");
+  var ipcRenderer = require('electron').ipcRenderer;
+  if (!checkTestServer()) {
+    ipcRenderer.on("peerId", function(e, id) {
+      console.log("rendererer on peerId: " + id);
+      $("#connectId").val(id);
+      connect();
+    });
+  }
+} else {
+  console.log("production environment");
 }
 
 var data = {};
